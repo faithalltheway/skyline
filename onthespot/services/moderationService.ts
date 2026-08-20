@@ -48,6 +48,33 @@ export async function approveEvent(eventId: string, actorId: string, reason: str
   });
 }
 
+/**
+ * Publishes every automatically-imported event still sitting in
+ * PENDING_REVIEW. Scoped to externalSource != null only — human-submitted
+ * community/partner events always go through individual review, never this
+ * bulk path. Imported events have no organizationId, so (matching
+ * approveEvent's rule) they publish immediately rather than landing in
+ * APPROVED.
+ */
+export async function bulkApproveImportedEvents(actorId: string): Promise<{ count: number }> {
+  const result = await db.event.updateMany({
+    where: { status: "PENDING_REVIEW", externalSource: { not: null } },
+    data: { status: "PUBLISHED", publishedAt: new Date(), rejectionReason: null },
+  });
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      action: "BULK_APPROVE_IMPORTED_EVENTS",
+      entityType: "SYSTEM",
+      entityId: "moderation",
+      metadata: { count: result.count },
+    },
+  });
+
+  return { count: result.count };
+}
+
 export async function rejectEvent(eventId: string, actorId: string, reason: string) {
   await db.event.update({ where: { id: eventId }, data: { status: "REJECTED", rejectionReason: reason } });
   await logModerationAction({ actorId, actionType: "REJECT_EVENT", targetType: "EVENT", targetId: eventId, reason });

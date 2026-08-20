@@ -5,6 +5,7 @@ import { formatDateRange } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { EVENT_SOURCE_LABEL } from "@/lib/eventSource";
+import { BulkApproveImportedEventsButton } from "./BulkApproveImportedEventsButton";
 
 export const metadata = { title: "Moderation queue" };
 
@@ -16,18 +17,24 @@ export default async function ModerationQueuePage({
   await requireRole("ADMIN");
   const { done } = await searchParams;
 
-  const events = await db.event.findMany({
-    where: { status: "PENDING_REVIEW" },
-    orderBy: { createdAt: "asc" },
-    include: { organization: { select: { name: true } }, createdBy: { select: { name: true } }, accessibility: true },
-  });
+  const [events, pendingImportedCount] = await Promise.all([
+    db.event.findMany({
+      where: { status: "PENDING_REVIEW" },
+      orderBy: { createdAt: "asc" },
+      include: { organization: { select: { name: true } }, createdBy: { select: { name: true } }, accessibility: true },
+    }),
+    db.event.count({ where: { status: "PENDING_REVIEW", externalSource: { not: null } } }),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-extrabold">Moderation queue</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-extrabold">Moderation queue</h1>
+        <BulkApproveImportedEventsButton pendingImportedCount={pendingImportedCount} />
+      </div>
       {done && (
         <p role="status" className="rounded-control bg-[var(--color-confirmed-bg)] px-3.5 py-2.5 text-sm font-medium text-[var(--color-confirmed)]">
-          Event {done.replace("-", " ")}.
+          {done === "imported-events-published" ? "Imported events published." : `Event ${done.replace("-", " ")}.`}
         </p>
       )}
 

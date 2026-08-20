@@ -34,6 +34,13 @@ export async function rejectEventAction(
   redirect("/admin/moderation?done=rejected");
 }
 
+export async function bulkApproveImportedEventsAction(): Promise<ModerationActionState> {
+  const admin = await requireRole("ADMIN");
+  await moderationService.bulkApproveImportedEvents(admin.id);
+  revalidatePath("/admin/moderation");
+  redirect("/admin/moderation?done=imported-events-published");
+}
+
 export async function requestChangesAction(
   _prevState: ModerationActionState,
   formData: FormData,
