@@ -16,6 +16,7 @@ import { ShareButton } from "@/components/events/ShareButton";
 import { ReportEventButton } from "@/components/events/ReportEventButton";
 import { EventCard } from "@/components/events/EventCard";
 import { MapView } from "@/components/map/MapView";
+import { AttendeeList } from "@/components/events/AttendeeList";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -44,12 +45,28 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
   await recordEventView(event.id).catch(() => {});
 
-  const [similar, myRsvp, saved, appUrl] = await Promise.all([
+  const [similar, myRsvp, saved, appUrl, attendeeRsvps] = await Promise.all([
     getSimilarEvents(event, prefs.map((p) => p.feature)),
     session?.user ? db.rSVP.findUnique({ where: { eventId_userId: { eventId: event.id, userId: session.user.id } } }) : null,
     session?.user ? db.savedEvent.findUnique({ where: { userId_eventId: { userId: session.user.id, eventId: event.id } } }) : null,
     Promise.resolve(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+    // Attendee identities are personal info — only shown to signed-in visitors, same as the rest of the app's social features.
+    session?.user
+      ? db.rSVP.findMany({
+          where: { eventId: event.id, status: "GOING" },
+          orderBy: { createdAt: "asc" },
+          take: 24,
+          include: { user: { select: { id: true, name: true, profile: { select: { username: true, avatarUrl: true } } } } },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const attendees = attendeeRsvps.map((r) => ({
+    userId: r.user.id,
+    name: r.user.name,
+    username: r.user.profile?.username ?? null,
+    avatarUrl: r.user.profile?.avatarUrl ?? null,
+  }));
 
   return (
     <article className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -139,6 +156,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             )}
             <p className="mt-1 text-xs text-neutral-500">Setting: {titleCase(event.indoorOutdoor)}</p>
           </section>
+
+          <AttendeeList attendees={attendees} totalGoing={event.goingCount} />
 
           <AccessibilityBreakdown
             accessibility={event.accessibility}
