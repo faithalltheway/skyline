@@ -41,7 +41,6 @@ const CATEGORY_MAP: Record<string, string> = {
   festivals: "festival",
   "performing-arts": "art",
   "community": "community-meetup",
-  "food-drink": "food",
   expos: "education",
 };
 
