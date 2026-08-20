@@ -75,6 +75,31 @@ export async function bulkApproveImportedEvents(actorId: string): Promise<{ coun
   return { count: result.count };
 }
 
+/**
+ * Rejects (unpublishes) every event sourced from Google Events, regardless
+ * of current status. That source is confirmed unreliable (see README §11)
+ * and its rows have degraded address data — the rows are kept for audit
+ * history rather than deleted, just pulled out of public view.
+ */
+export async function bulkUnpublishGoogleEvents(actorId: string, reason: string): Promise<{ count: number }> {
+  const result = await db.event.updateMany({
+    where: { externalSource: "GOOGLE_EVENTS" },
+    data: { status: "REJECTED", rejectionReason: reason, publishedAt: null },
+  });
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      action: "BULK_UNPUBLISH_GOOGLE_EVENTS",
+      entityType: "SYSTEM",
+      entityId: "moderation",
+      metadata: { count: result.count, reason },
+    },
+  });
+
+  return { count: result.count };
+}
+
 export async function rejectEvent(eventId: string, actorId: string, reason: string) {
   await db.event.update({ where: { id: eventId }, data: { status: "REJECTED", rejectionReason: reason } });
   await logModerationAction({ actorId, actionType: "REJECT_EVENT", targetType: "EVENT", targetId: eventId, reason });

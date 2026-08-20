@@ -19,12 +19,16 @@ async function lookupZip(lat: number, lng: number, token: string): Promise<strin
   return data.features?.[0]?.text ?? null;
 }
 
-// One-off data-quality fix: the seed script hardcoded zip="00000" on every
-// demo event. Their venue name/address/city/state/coordinates are all real
-// (jittered around real city centers) — only the zip is a placeholder.
-// Reverse-geocodes each event's real coordinates via Mapbox to backfill the
-// actual zip rather than guessing. Idempotent: only touches rows still at
-// the "00000" placeholder, so re-running is a no-op once fixed.
+// One-off data-quality fix for events with a real venue/address/coordinates
+// but a placeholder zip="00000": the seed script hardcoded that on every
+// demo event, and Ticketmaster/PredictHQ occasionally don't return a postal
+// code even when they return real venue coordinates. Reverse-geocodes each
+// event's real coordinates via Mapbox to backfill the actual zip rather
+// than guessing. Deliberately excludes Google Events — that source is
+// confirmed unreliable and its rows are unpublished instead (see
+// /api/admin/unpublish-google-events), so there's no point fixing just
+// their zip while their street address is still a placeholder too.
+// Idempotent: only touches rows still at "00000", so re-running is a no-op.
 export async function GET() {
   const session = await auth();
   if (session?.user?.role !== "ADMIN") {
@@ -37,7 +41,7 @@ export async function GET() {
   }
 
   const events = await db.event.findMany({
-    where: { externalSource: null, zip: "00000" },
+    where: { zip: "00000", NOT: { externalSource: "GOOGLE_EVENTS" } },
     select: { id: true, title: true, latitude: true, longitude: true },
   });
 
