@@ -76,6 +76,31 @@ export async function bulkApproveImportedEvents(actorId: string): Promise<{ coun
 }
 
 /**
+ * Permanently deletes every event sourced from Google Events, regardless of
+ * current status. That source is confirmed unreliable (see README §11) and
+ * its rows have degraded address data. All Event-referencing tables
+ * (RSVP, SavedEvent, EventCategory, EventAccessibility, EventImage, Report,
+ * EventAnalytics, FeaturedPlacement) cascade-delete cleanly.
+ */
+export async function bulkDeleteGoogleEvents(actorId: string): Promise<{ count: number }> {
+  const toDelete = await db.event.findMany({ where: { externalSource: "GOOGLE_EVENTS" }, select: { id: true, title: true } });
+
+  const result = await db.event.deleteMany({ where: { externalSource: "GOOGLE_EVENTS" } });
+
+  await db.auditLog.create({
+    data: {
+      actorId,
+      action: "BULK_DELETE_GOOGLE_EVENTS",
+      entityType: "SYSTEM",
+      entityId: "moderation",
+      metadata: { count: result.count, deletedTitles: toDelete.map((e) => e.title) },
+    },
+  });
+
+  return { count: result.count };
+}
+
+/**
  * Rejects (unpublishes) every event sourced from Google Events, regardless
  * of current status. That source is confirmed unreliable (see README §11)
  * and its rows have degraded address data — the rows are kept for audit
