@@ -28,9 +28,13 @@ export async function GET() {
     }),
   ]);
 
+  // Excludes Google Events — that source's issues are already known and its
+  // rows are handled separately (unpublished), so surfacing them here again
+  // would just crowd out anything still worth investigating in other sources.
   const samples = await db.event.findMany({
     where: {
       OR: [{ addressLine1: "Address not provided" }, { zip: "00000" }, { latitude: 0, longitude: 0 }],
+      NOT: { externalSource: "GOOGLE_EVENTS" },
     },
     select: { id: true, title: true, slug: true, externalSource: true, venueName: true, addressLine1: true, city: true, state: true, zip: true, latitude: true, longitude: true, status: true },
     take: 20,
