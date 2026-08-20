@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getStripeClient, stripeConfigured } from "@/lib/stripe";
 import { getPlatformSetting } from "@/lib/settings";
+import type { PaidAccessType } from "@prisma/client";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -135,4 +136,67 @@ export async function startFeaturedPlacementCheckout(
     }),
   ]);
   return "/partner/events?featured=true";
+}
+
+const ACCESS_TYPE_LABEL: Record<PaidAccessType, string> = { MESSAGE: "message", FOLLOW: "follow" };
+
+/**
+ * Starts a recurring monthly unlock so payerId can message or follow
+ * payeeId, whose UserProfile has a messagePriceCents/followPriceCents set.
+ * The platform keeps the payment in full (no Stripe Connect payout to
+ * payeeId — see PaidAccessGrant).
+ */
+export async function startUserAccessCheckout(
+  payerId: string,
+  payerEmail: string,
+  payeeId: string,
+  type: PaidAccessType,
+): Promise<string> {
+  const targetProfile = await db.userProfile.findUniqueOrThrow({ where: { userId: payeeId } });
+  const priceCents = type === "MESSAGE" ? targetProfile.messagePriceCents : targetProfile.followPriceCents;
+  if (!priceCents) throw new Error("This user does not charge for that.");
+
+  const returnPath = type === "MESSAGE" ? `/messages/new/${payeeId}` : `/u/${targetProfile.username}`;
+  const stripe = getStripeClient();
+
+  if (stripe && stripeConfigured) {
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_email: payerEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Unlock ${ACCESS_TYPE_LABEL[type]}ing @${targetProfile.username} on OnTheSpot` },
+            unit_amount: priceCents,
+            recurring: { interval: "month" },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${APP_URL}${returnPath}?unlocked=true`,
+      cancel_url: `${APP_URL}${returnPath}`,
+      metadata: { kind: "USER_ACCESS_UNLOCK", payerId, payeeId, accessType: type },
+    });
+    return session.url!;
+  }
+
+  // Demo mode: no Stripe keys configured — simulate a successful unlock so
+  // the feature is fully exercisable without external credentials.
+  await db.$transaction([
+    db.paidAccessGrant.upsert({
+      where: { payerId_payeeId_type: { payerId, payeeId, type } },
+      update: { status: "ACTIVE", amountCents: priceCents },
+      create: { payerId, payeeId, type, status: "ACTIVE", amountCents: priceCents },
+    }),
+    db.payment.create({
+      data: {
+        userId: payerId,
+        amountCents: priceCents,
+        status: "SUCCEEDED",
+        description: `Unlock ${ACCESS_TYPE_LABEL[type]}ing @${targetProfile.username} (demo mode)`,
+      },
+    }),
+  ]);
+  return `${returnPath}?unlocked=true`;
 }

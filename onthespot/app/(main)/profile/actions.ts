@@ -66,3 +66,34 @@ export async function updateProfileAction(
   revalidatePath("/profile");
   return { success: true };
 }
+
+export interface MonetizationFormState {
+  success?: boolean;
+  error?: string;
+}
+
+function parseOptionalDollars(raw: FormDataEntryValue | null): number | null {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return null;
+  const dollars = Number(trimmed);
+  if (!Number.isFinite(dollars) || dollars <= 0) return null;
+  return Math.round(dollars * 100);
+}
+
+export async function updateMonetizationSettingsAction(
+  _prevState: MonetizationFormState,
+  formData: FormData,
+): Promise<MonetizationFormState> {
+  const user = await requireUser();
+
+  const messagePriceCents = parseOptionalDollars(formData.get("messagePrice"));
+  const followPriceCents = parseOptionalDollars(formData.get("followPrice"));
+
+  await db.userProfile.update({
+    where: { userId: user.id },
+    data: { messagePriceCents, followPriceCents },
+  });
+
+  revalidatePath("/profile");
+  return { success: true };
+}

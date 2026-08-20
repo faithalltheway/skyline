@@ -50,6 +50,22 @@ export async function POST(request: Request) {
       });
     }
 
+    if (metadata.kind === "USER_ACCESS_UNLOCK" && metadata.payerId && metadata.payeeId && metadata.accessType) {
+      const type = metadata.accessType as "MESSAGE" | "FOLLOW";
+      await db.paidAccessGrant.upsert({
+        where: { payerId_payeeId_type: { payerId: metadata.payerId, payeeId: metadata.payeeId, type } },
+        update: { status: "ACTIVE", stripeSubscriptionId: session.subscription as string, amountCents: session.amount_total ?? 0 },
+        create: {
+          payerId: metadata.payerId,
+          payeeId: metadata.payeeId,
+          type,
+          status: "ACTIVE",
+          amountCents: session.amount_total ?? 0,
+          stripeSubscriptionId: session.subscription as string,
+        },
+      });
+    }
+
     if (metadata.kind === "FEATURED_PLACEMENT" && metadata.eventId && metadata.organizationId) {
       const weeks = Number(metadata.weeks ?? 1);
       const endAt = new Date(Date.now() + weeks * 7 * 24 * 60 * 60 * 1000);

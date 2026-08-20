@@ -196,39 +196,50 @@ model User {
   profile                  UserProfile?
   accessibilityPreferences AccessibilityPreference[]
   organizationMemberships  OrganizationMember[]
-  createdEvents            Event[]                    @relation("EventCreatedBy")
+  createdEvents            Event[]                   @relation("EventCreatedBy")
   rsvps                    RSVP[]
   savedEvents              SavedEvent[]
-  followingOrgs            Follow[]                   @relation("UserFollows")
-  reportsFiled             Report[]                   @relation("ReportsFiled")
-  reportsResolved          Report[]                   @relation("ReportsResolved")
-  moderationActions        ModerationAction[]         @relation("ModerationActor")
-  auditLogs                AuditLog[]                 @relation("AuditActor")
+  followingOrgs            Follow[]                  @relation("UserFollows")
+  reportsFiled             Report[]                  @relation("ReportsFiled")
+  reportsResolved          Report[]                  @relation("ReportsResolved")
+  moderationActions        ModerationAction[]        @relation("ModerationActor")
+  auditLogs                AuditLog[]                @relation("AuditActor")
   subscription             Subscription?
   payments                 Payment[]
   passwordResetTokens      PasswordResetToken[]
   emailVerificationTokens  EmailVerificationToken[]
+  conversationsAsUserA     Conversation[]            @relation("ConversationUserA")
+  conversationsAsUserB     Conversation[]            @relation("ConversationUserB")
+  sentMessages             Message[]                 @relation("MessageSender")
+  userFollowing            UserFollow[]              @relation("UserFollowFollower")
+  userFollowers            UserFollow[]              @relation("UserFollowFollowing")
+  paidAccessGranted        PaidAccessGrant[]         @relation("PaidAccessPayer")
+  paidAccessReceived       PaidAccessGrant[]         @relation("PaidAccessPayee")
 
   @@index([role])
   @@index([status])
 }
 
 model UserProfile {
-  id          String     @id @default(cuid())
-  userId      String     @unique
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  username    String     @unique
-  bio         String?
-  avatarUrl   String?
-  city        String?
-  state       String?
-  zip         String?
-  latitude    Float?
-  longitude   Float?
-  interests   Interest[] @default([])
-  onboardedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username          String     @unique
+  bio               String?
+  avatarUrl         String?
+  city              String?
+  state             String?
+  zip               String?
+  latitude          Float?
+  longitude         Float?
+  interests         Interest[] @default([])
+  onboardedAt       DateTime?
+  // Optional monthly price to unlock messaging/following this user. Null
+  // means free/open — no PaidAccessGrant is required.
+  messagePriceCents Int?
+  followPriceCents  Int?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 }
 
 model AccessibilityPreference {
@@ -294,7 +305,7 @@ model Organization {
   events             Event[]
   verification       OrganizationVerification?
   subscription       Subscription?
-  followers          Follow[]              @relation("OrgFollows")
+  followers          Follow[]                  @relation("OrgFollows")
   featuredPlacements FeaturedPlacement[]
   payments           Payment[]
 
@@ -397,13 +408,13 @@ model Event {
   deletedAt   DateTime?
 
   categories         EventCategory[]
-  accessibility       EventAccessibility[]
-  images              EventImage[]
-  rsvps               RSVP[]
-  savedBy             SavedEvent[]
-  reports             Report[]
-  analytics           EventAnalytics[]
-  featuredPlacements  FeaturedPlacement[]
+  accessibility      EventAccessibility[]
+  images             EventImage[]
+  rsvps              RSVP[]
+  savedBy            SavedEvent[]
+  reports            Report[]
+  analytics          EventAnalytics[]
+  featuredPlacements FeaturedPlacement[]
 
   @@unique([externalSource, externalId])
   @@index([status])
@@ -484,6 +495,83 @@ model Follow {
   createdAt      DateTime     @default(now())
 
   @@unique([followerId, organizationId])
+}
+
+// User-to-user follow (distinct from Follow, which is for organizations).
+model UserFollow {
+  id          String   @id @default(cuid())
+  followerId  String
+  follower    User     @relation("UserFollowFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("UserFollowFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+// ---------------------------------------------------------------------------
+// Direct messaging
+// ---------------------------------------------------------------------------
+
+// One conversation per unordered pair of users. userAId/userBId are always
+// stored with the lexicographically smaller user id first (enforced in
+// services/messagingService.ts) so the pair has exactly one row regardless
+// of who started it.
+model Conversation {
+  id            String   @id @default(cuid())
+  userAId       String
+  userA         User     @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId       String
+  userB         User     @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Paid user-to-user access (messaging / following a priced profile)
+// ---------------------------------------------------------------------------
+
+enum PaidAccessType {
+  MESSAGE
+  FOLLOW
+}
+
+// Recurring monthly unlock: payerId has paid payeeId's messagePriceCents or
+// followPriceCents (see UserProfile) to message or follow them. The
+// platform keeps the payment in full — no Stripe Connect payout to payeeId.
+model PaidAccessGrant {
+  id                   String             @id @default(cuid())
+  payerId              String
+  payer                User               @relation("PaidAccessPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  payeeId              String
+  payee                User               @relation("PaidAccessPayee", fields: [payeeId], references: [id], onDelete: Cascade)
+  type                 PaidAccessType
+  status               SubscriptionStatus @default(ACTIVE)
+  amountCents          Int
+  stripeSubscriptionId String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([payerId, payeeId, type])
 }
 
 // ---------------------------------------------------------------------------

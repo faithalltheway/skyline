@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ProfileForm } from "./ProfileForm";
+import { MonetizationForm } from "./MonetizationForm";
 
 export const metadata = { title: "Profile" };
 
@@ -89,6 +90,14 @@ export default async function ProfilePage() {
           zip={profile?.zip ?? ""}
           initialInterests={profile?.interests ?? []}
           initialPreferences={prefs.map((p) => p.feature)}
+        />
+      </Card>
+
+      <Card className="mt-6 p-6 sm:p-8">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-neutral-500">Messaging &amp; follow pricing</h2>
+        <MonetizationForm
+          messagePrice={profile?.messagePriceCents ? (profile.messagePriceCents / 100).toString() : ""}
+          followPrice={profile?.followPriceCents ? (profile.followPriceCents / 100).toString() : ""}
         />
       </Card>
     </div>
