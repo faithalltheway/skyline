@@ -257,7 +257,9 @@ function normalizeGoogleEvent(result: SerpApiEventResult, city: string, state: s
     zip: "00000",
     latitude: coords ? jitter(coords.lat, 1) : 0,
     longitude: coords ? jitter(coords.lng, 1) : 0,
-    isFree: !hasTicketLink,
+    // Absence of a ticket link in Google's listing means we don't know the
+    // price, not that the event is free — don't conflate the two.
+    isFree: false,
     price: null,
     ticketUrl: hasTicketLink ? (result.ticket_info?.[0]?.link ?? result.link) : null,
     coverImageUrl: result.thumbnail || null,

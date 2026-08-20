@@ -112,7 +112,9 @@ export async function fetchTicketmasterEvents(city: string, state: string): Prom
       zip: venue.postalCode || "00000",
       latitude: lat,
       longitude: lng,
-      isFree: price == null,
+      // Ticketmaster omits priceRanges when it simply doesn't have pricing data —
+      // that's not the same as the event being free, so don't conflate them.
+      isFree: false,
       price,
       ticketUrl: event.url ?? null,
       coverImageUrl: pickImage(event.images),

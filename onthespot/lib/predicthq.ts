@@ -98,7 +98,9 @@ export async function fetchPredictHqEvents(city: string, state: string, lat: num
       zip: address?.postcode || "00000",
       latitude: evLat,
       longitude: lon,
-      isFree: true,
+      // PredictHQ provides no pricing data at all — that's not the same as
+      // the event being free, so don't conflate the two.
+      isFree: false,
       price: null,
       ticketUrl: null,
       coverImageUrl: null,
