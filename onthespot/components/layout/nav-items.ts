@@ -11,6 +11,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/rsvps", label: "My RSVPs", icon: "check" },
   { href: "/events/create", label: "Create Event", icon: "plus" },
   { href: "/messages", label: "Messages", icon: "message" },
+  { href: "/people", label: "People", icon: "users" },
   { href: "/profile", label: "Profile", icon: "user" },
 ];
 

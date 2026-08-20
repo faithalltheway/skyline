@@ -10,7 +10,7 @@ import { ALL_ACCESSIBILITY_FEATURES } from "@/lib/accessibility";
 import type { NormalizedImportedEvent } from "@/types/eventImport";
 import type { EventSource } from "@prisma/client";
 
-const IMPORT_BOT_EMAIL = "imports@onthespot.internal";
+export const IMPORT_BOT_EMAIL = "imports@onthespot.internal";
 
 const TARGET_CITIES: { city: string; state: string }[] = [
   { city: "Waco", state: "TX" },
