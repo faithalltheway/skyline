@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { createPartnerEventAction, type PartnerEventState } from "@/app/partner/events/new/actions";
 import { ProgressSteps } from "@/components/ui/ProgressSteps";
 import { TextField, TextAreaField } from "@/components/ui/Field";
@@ -10,9 +10,33 @@ import { Card } from "@/components/ui/Card";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { LocationFields } from "@/components/events/LocationFields";
 import { AccessibilityQuestionnaire } from "@/components/events/AccessibilityQuestionnaire";
+import { useAnnounce } from "@/components/ui/LiveRegion";
 import type { AccessibilityFeature, AccessibilityState } from "@prisma/client";
 
 const STEPS = ["Basic", "Date & time", "Location", "Pricing", "Accessibility", "Photos", "Review"];
+
+// Which step each server-validated field lives on, so a failed submission
+// can jump the wizard back to whatever step actually has the error instead
+// of leaving the user stuck on Review with no visible feedback.
+const FIELD_STEP: Record<string, number> = {
+  title: 0,
+  description: 0,
+  categories: 0,
+  startAt: 1,
+  endAt: 1,
+  venueName: 2,
+  addressLine1: 2,
+  city: 2,
+  state: 2,
+  zip: 2,
+  latitude: 2,
+  longitude: 2,
+  price: 3,
+  ticketUrl: 3,
+  accessibilityContactName: 4,
+  accessibilityContactEmail: 4,
+  accessibilityContactPhone: 4,
+};
 
 const initialState: PartnerEventState = {};
 
@@ -57,10 +81,33 @@ export function PartnerEventWizard({
   const [isFree, setIsFree] = useState(defaults?.isFree ?? true);
   const [isRecurring, setIsRecurring] = useState(defaults?.isRecurring ?? false);
   const [confirmed, setConfirmed] = useState(false);
+  const announce = useAnnounce();
 
   function goTo(next: number) {
     setStep(Math.min(Math.max(next, 0), STEPS.length - 1));
   }
+
+  // Jump back to whichever step has the error after a failed submission —
+  // adjusted during render (React's recommended pattern for state derived
+  // from a changed prop/value) rather than in an effect, so the erroring
+  // step is already visible on the very first paint after the failed
+  // submit instead of flashing the Review step first.
+  const [handledErrorState, setHandledErrorState] = useState(state);
+  if (state !== handledErrorState) {
+    setHandledErrorState(state);
+    const fields = state.fieldErrors ? Object.keys(state.fieldErrors) : [];
+    if (fields.length > 0) {
+      setStep(Math.min(...fields.map((f) => FIELD_STEP[f] ?? STEPS.length - 1)));
+    }
+  }
+
+  useEffect(() => {
+    const fields = state.fieldErrors ? Object.keys(state.fieldErrors) : [];
+    if (fields.length === 0) return;
+    const earliestStep = Math.min(...fields.map((f) => FIELD_STEP[f] ?? STEPS.length - 1));
+    announce(`There's a problem with ${STEPS[earliestStep]} — see the highlighted field.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
     <Card className="p-6 sm:p-8">
@@ -112,7 +159,7 @@ export function PartnerEventWizard({
 
         <div hidden={step !== 2} className="flex flex-col gap-4">
           <h2 className="text-xl font-bold">Location</h2>
-          <LocationFields defaultValues={defaults} />
+          <LocationFields defaultValues={defaults} required={step === 2} errors={state.fieldErrors} />
         </div>
 
         <div hidden={step !== 3} className="flex flex-col gap-4">
@@ -127,8 +174,8 @@ export function PartnerEventWizard({
           </label>
           {!isFree && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField label="Price (USD)" name="price" type="number" step="0.01" min={0} defaultValue={defaults?.price} />
-              <TextField label="Ticket link" name="ticketUrl" type="url" defaultValue={defaults?.ticketUrl} />
+              <TextField label="Price (USD)" name="price" type="number" step="0.01" min={0} defaultValue={defaults?.price} error={state.fieldErrors?.price} />
+              <TextField label="Ticket link" name="ticketUrl" type="url" defaultValue={defaults?.ticketUrl} error={state.fieldErrors?.ticketUrl} />
             </div>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -149,7 +196,7 @@ export function PartnerEventWizard({
               label="Accessibility contact name"
               name="accessibilityContactName"
               defaultValue={defaults?.accessibilityContactName}
-              required
+              required={step === 4}
               error={state.fieldErrors?.accessibilityContactName}
             />
             <TextField
@@ -157,7 +204,7 @@ export function PartnerEventWizard({
               name="accessibilityContactEmail"
               type="email"
               defaultValue={defaults?.accessibilityContactEmail}
-              required
+              required={step === 4}
               error={state.fieldErrors?.accessibilityContactEmail}
             />
             <TextField
@@ -165,6 +212,7 @@ export function PartnerEventWizard({
               name="accessibilityContactPhone"
               type="tel"
               defaultValue={defaults?.accessibilityContactPhone}
+              error={state.fieldErrors?.accessibilityContactPhone}
             />
           </div>
         </div>

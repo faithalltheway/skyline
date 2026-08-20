@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { createCommunityEventAction, type CreateEventState } from "./actions";
 import { ProgressSteps } from "@/components/ui/ProgressSteps";
 import { TextField, TextAreaField } from "@/components/ui/Field";
@@ -13,6 +13,27 @@ import { AccessibilityQuestionnaire } from "@/components/events/AccessibilityQue
 import { useAnnounce } from "@/components/ui/LiveRegion";
 
 const STEPS = ["Basic info", "Date & time", "Location", "Accessibility", "Photos", "Review"];
+
+// Which step each server-validated field lives on, so a failed submission
+// can jump the wizard back to whatever step actually has the error instead
+// of leaving the user stuck on Review with no visible feedback.
+const FIELD_STEP: Record<string, number> = {
+  title: 0,
+  description: 0,
+  categories: 0,
+  startAt: 1,
+  endAt: 1,
+  venueName: 2,
+  addressLine1: 2,
+  city: 2,
+  state: 2,
+  zip: 2,
+  latitude: 2,
+  longitude: 2,
+  accessibilityContactName: 3,
+  accessibilityContactEmail: 3,
+  accessibilityContactPhone: 3,
+};
 
 const initialState: CreateEventState = {};
 
@@ -27,6 +48,28 @@ export function CreateEventWizard({ categories }: { categories: { slug: string; 
     setStep(Math.min(Math.max(next, 0), STEPS.length - 1));
     announce(`Step ${next + 1} of ${STEPS.length}: ${STEPS[next]}`);
   }
+
+  // Jump back to whichever step has the error after a failed submission —
+  // adjusted during render (React's recommended pattern for state derived
+  // from a changed prop/value) rather than in an effect, so the erroring
+  // step is already visible on the very first paint after the failed
+  // submit instead of flashing the Review step first.
+  const [handledErrorState, setHandledErrorState] = useState(state);
+  if (state !== handledErrorState) {
+    setHandledErrorState(state);
+    const fields = state.fieldErrors ? Object.keys(state.fieldErrors) : [];
+    if (fields.length > 0) {
+      setStep(Math.min(...fields.map((f) => FIELD_STEP[f] ?? STEPS.length - 1)));
+    }
+  }
+
+  useEffect(() => {
+    const fields = state.fieldErrors ? Object.keys(state.fieldErrors) : [];
+    if (fields.length === 0) return;
+    const earliestStep = Math.min(...fields.map((f) => FIELD_STEP[f] ?? STEPS.length - 1));
+    announce(`There's a problem with ${STEPS[earliestStep]} — see the highlighted field.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
     <Card className="p-6 sm:p-8">
@@ -90,16 +133,16 @@ export function CreateEventWizard({ categories }: { categories: { slug: string; 
 
         <div hidden={step !== 2} className="flex flex-col gap-4">
           <h2 className="text-xl font-bold">Where is it happening?</h2>
-          <LocationFields />
+          <LocationFields required={step === 2} errors={state.fieldErrors} />
         </div>
 
         <div hidden={step !== 3} className="flex flex-col gap-4">
           <h2 className="text-xl font-bold">Accessibility information</h2>
           <AccessibilityQuestionnaire />
           <div className="grid gap-4 sm:grid-cols-3">
-            <TextField label="Accessibility contact name" name="accessibilityContactName" />
-            <TextField label="Accessibility contact email" name="accessibilityContactEmail" type="email" />
-            <TextField label="Accessibility contact phone" name="accessibilityContactPhone" type="tel" />
+            <TextField label="Accessibility contact name" name="accessibilityContactName" error={state.fieldErrors?.accessibilityContactName} />
+            <TextField label="Accessibility contact email" name="accessibilityContactEmail" type="email" error={state.fieldErrors?.accessibilityContactEmail} />
+            <TextField label="Accessibility contact phone" name="accessibilityContactPhone" type="tel" error={state.fieldErrors?.accessibilityContactPhone} />
           </div>
         </div>
 

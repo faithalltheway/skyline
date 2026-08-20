@@ -2,7 +2,7 @@
 
 **OnTheSpot** is an accessibility-first event and activity discovery platform. It helps people find nearby events and activities that match their specific accessibility, mobility, sensory, and accommodation needs — and gives hosts (individuals and organizations) the tools to publish structured, trustworthy accessibility information instead of a paragraph of free text.
 
-This is a full-stack MVP: real database, real authentication, real authorization, a working accessibility matching engine, an interactive map, RSVP/save/follow systems, multi-step event creation wizards, a Partner dashboard with analytics, and an Admin dashboard with a full moderation workflow.
+This is a full-stack MVP: real database, real authentication, real authorization, a working accessibility matching engine, an interactive map, RSVP/save/follow systems, multi-step event creation wizards, a Partner dashboard with analytics, an Admin dashboard with a full moderation workflow, and an automated Google Events import pipeline that feeds new candidate listings into that same moderation queue.
 
 ---
 
@@ -150,7 +150,21 @@ npm run start
 
 **Implemented**: everything in the product brief — auth & onboarding, accessibility matching, discovery + filtering, interactive map with clustering, RSVP/save/follow, community + partner event creation wizards with mandatory structured accessibility data, partner dashboard + analytics (charts, CSV export), full admin dashboard (moderation queue with approve/reject/request-changes, user & partner management, reports queue, revenue, audit log, configurable pricing), Stripe-ready monetization, seed data, and a test suite (unit, integration, and automated accessibility checks via axe).
 
-**Phase 2 recommendations**:
+## 11. Google Events import (built, currently disabled by default)
+
+`/admin/system` has a "Google Events import" panel that calls `/api/cron/import-events`, which queries [SerpApi's Google Events engine](https://serpapi.com) for Waco/Austin/Dallas/Houston. For each new result it would:
+
+- Skip it if already imported (deduped on `(externalSource, externalId)`)
+- Skip it if the date can't be confidently parsed — Google's event dates are loosely formatted text, not machine-readable, and a wrong date is worse than no import
+- Create it as `PENDING_REVIEW` with **every** accessibility feature set to `UNKNOWN` (never guessed) — it would land in the same moderation queue as any other submission, clearly tagged "Imported from Google Events," and never reach Discover until a moderator reviews it
+- Attribute it to a dedicated non-login system account (`imports@onthespot.internal`) rather than a real user
+
+**Status**: in testing, Google's Events search feature reliably returned zero results for requests from non-residential/proxy IPs — including from a paid SerpApi plan — because that feature depends on fine-grained real-device location signals, not just IP country. There's no automatic (Vercel Cron) trigger configured as a result, to avoid spending API credits on empty responses; the manual "Sync now" button in `/admin/system` is still available if you want to retest later (e.g. with a different provider or a residential-proxy setup). Manual event creation (`/events/create` for community events, `/partner/events/new` for organizations) is the primary way events get added for now.
+
+Requires `SERPAPI_KEY`; optionally `CRON_SECRET` if you re-enable a scheduled trigger later (add a `crons` block back to `vercel.json`).
+
+## 12. Phase 2 recommendations
+
 - Real transactional email (verification, password reset, RSVP confirmations) — currently these flows work but surface their links directly in the UI in development instead of sending mail, since no email provider is configured.
 - Real geocoding (the app ships a small static lookup for the four seeded Texas metros; a live geocoder would generalize this to any address).
 - Recurring event instance generation from `recurrenceRule` (currently stored as a plain-language description).

@@ -35,7 +35,7 @@ export function formatDistance(miles: number): string {
 export function formatPrice(isFree: boolean, price?: number | string | null): string {
   if (isFree) return "Free";
   const num = typeof price === "string" ? parseFloat(price) : price;
-  if (!num) return "Free";
+  if (!num) return "See ticket link";
   return `$${num.toFixed(2)}`;
 }
 

@@ -141,6 +141,19 @@ const EVENT_TEMPLATES: { title: string; category: string; description: string }[
 async function main() {
   console.log("Seeding OnTheSpot demo data…");
 
+  // Running as part of a Vercel build (see vercel.json's buildCommand)? Only
+  // seed an empty database — never wipe real data on a redeploy. Local
+  // `npm run db:seed` runs outside Vercel and keeps its existing
+  // wipe-and-reseed behavior for iterative dev.
+  if (process.env.VERCEL) {
+    const existingUsers = await db.user.count();
+    if (existingUsers > 0) {
+      console.log("Data already present — skipping seed (Vercel build).");
+      await db.$disconnect();
+      return;
+    }
+  }
+
   console.log("Clearing existing data…");
   await db.$transaction([
     db.auditLog.deleteMany(),
@@ -397,7 +410,7 @@ async function main() {
         price: isFree ? null : randomInt(5, 75),
         ticketUrl: isFree ? null : "https://example.com/tickets",
         minAge: Math.random() < 0.2 ? 18 : null,
-        coverImageUrl: `https://picsum.photos/seed/onthespot-${i}/800/600`,
+        coverImageUrl: `/seed/event-${i % 20}.svg`,
         accessibilityContactName: org ? "Accessibility Team" : null,
         accessibilityContactEmail: org ? "access@example.com" : null,
         accessibilityContactPhone: org ? "555-010-0100" : null,
@@ -409,7 +422,7 @@ async function main() {
           create: [{ categoryId: (categoryByName.get(template.category) ?? categories[0]).id }],
         },
         accessibility: { create: randomAccessibilityAnswers(accessibilityProfile) },
-        images: { create: [{ url: `https://picsum.photos/seed/onthespot-${i}/800/600`, position: 0 }] },
+        images: { create: [{ url: `/seed/event-${i % 20}.svg`, position: 0 }] },
       },
     });
     createdEvents.push({ id: event.id, slug: event.slug, organizationId: event.organizationId, status: event.status });

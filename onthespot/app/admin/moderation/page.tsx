@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { formatDateRange } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
+import { EVENT_SOURCE_LABEL } from "@/lib/eventSource";
 
 export const metadata = { title: "Moderation queue" };
 
@@ -43,11 +44,16 @@ export default async function ModerationQueuePage({
                 <div>
                   <p className="font-bold">{event.title}</p>
                   <p className="text-sm text-neutral-500">
-                    {formatDateRange(event.startAt, event.endAt)} · Hosted by{" "}
-                    {event.organization?.name ?? event.createdBy.name}
+                    {formatDateRange(event.startAt, event.endAt)} ·{" "}
+                    {event.externalSource
+                      ? `Imported from ${EVENT_SOURCE_LABEL[event.externalSource]}`
+                      : `Hosted by ${event.organization?.name ?? event.createdBy.name}`}
                   </p>
                 </div>
-                <Badge tone="unknown">{event.accessibility.length} accessibility answers</Badge>
+                <div className="flex items-center gap-2">
+                  {event.externalSource && <Badge tone="accent">Imported</Badge>}
+                  <Badge tone="unknown">{event.accessibility.length} accessibility answers</Badge>
+                </div>
               </Link>
             </li>
           ))}

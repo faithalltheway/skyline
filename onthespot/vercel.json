@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npx prisma generate && npx prisma migrate deploy && node scripts/generate-seed-images.mjs && tsx prisma/seed.ts && next build",
+  "crons": [
+    {
+      "path": "/api/cron/import-events",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}

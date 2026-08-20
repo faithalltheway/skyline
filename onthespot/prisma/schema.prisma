@@ -54,6 +54,14 @@ enum IndoorOutdoor {
   BOTH
 }
 
+// Source of an automatically-imported event (see services/eventImportService.ts).
+// Null on any event created directly by a user or organization.
+enum EventSource {
+  GOOGLE_EVENTS
+  TICKETMASTER
+  PREDICTHQ
+}
+
 enum AccessibilityState {
   CONFIRMED
   NOT_AVAILABLE
@@ -374,6 +382,11 @@ model Event {
 
   coverImageUrl String?
 
+  // Set only for events brought in by the automated import pipeline
+  // (services/eventImportService.ts) — used to dedupe repeated sync runs.
+  externalSource EventSource?
+  externalId     String?
+
   viewCount     Int       @default(0)
   isFeatured    Boolean   @default(false)
   featuredUntil DateTime?
@@ -392,6 +405,7 @@ model Event {
   analytics           EventAnalytics[]
   featuredPlacements  FeaturedPlacement[]
 
+  @@unique([externalSource, externalId])
   @@index([status])
   @@index([startAt])
   @@index([city, state])
